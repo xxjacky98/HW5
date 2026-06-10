@@ -9,6 +9,8 @@ import SummaryCards from "./component/SummaryCards.vue";
 import YearFilter from "./component/YearFilter.vue";
 
 const AVG_NAME = "平均電價(元/度)";
+const STATIC_DATA_URL = `${import.meta.env.BASE_URL}data/prices.json`;
+const STATIC_ROWS_KEY = "hw5-static-prices";
 
 const rows = ref([]);
 const startYear = ref("");
@@ -16,6 +18,7 @@ const endYear = ref("");
 const isLoading = ref(false);
 const formMessage = ref({ text: "", kind: "info" });
 const importMessage = ref({ text: "", kind: "info" });
+const isStaticSite = window.location.hostname.endsWith("github.io");
 
 function yearFromDate(dateText) {
   return typeof dateText === "string" ? dateText.slice(0, 4) : "";
@@ -57,9 +60,45 @@ async function requestJson(url, options = {}) {
   return data;
 }
 
+function saveStaticRows(items) {
+  localStorage.setItem(STATIC_ROWS_KEY, JSON.stringify(items));
+}
+
+function readSavedStaticRows() {
+  const savedRows = localStorage.getItem(STATIC_ROWS_KEY);
+  if (!savedRows) return null;
+
+  try {
+    const parsedRows = JSON.parse(savedRows);
+    return Array.isArray(parsedRows) ? parsedRows : null;
+  } catch {
+    return null;
+  }
+}
+
+async function loadStaticRows({ reset = false } = {}) {
+  if (!reset) {
+    const savedRows = readSavedStaticRows();
+    if (savedRows) {
+      rows.value = savedRows;
+      return savedRows;
+    }
+  }
+
+  const staticRows = await requestJson(STATIC_DATA_URL);
+  rows.value = staticRows;
+  saveStaticRows(staticRows);
+  return staticRows;
+}
+
 async function loadRows() {
   isLoading.value = true;
   try {
+    if (isStaticSite) {
+      await loadStaticRows();
+      return;
+    }
+
     rows.value = await requestJson("/api/prices");
   } finally {
     isLoading.value = false;
@@ -70,6 +109,23 @@ async function handleCreatePrice(payload) {
   formMessage.value = { text: "新增中...", kind: "info" };
 
   try {
+    if (isStaticSite) {
+      const newRow = {
+        id: Date.now(),
+        ...payload,
+        name: AVG_NAME,
+        price: Math.round(Number(payload.price) * 10000) / 10000,
+        created_at: new Date().toISOString(),
+      };
+      const nextRows = [newRow, ...rows.value].sort((left, right) =>
+        String(right.date).localeCompare(String(left.date)),
+      );
+      rows.value = nextRows;
+      saveStaticRows(nextRows);
+      formMessage.value = { text: "靜態展示版已新增到此瀏覽器", kind: "ok" };
+      return;
+    }
+
     await requestJson("/api/prices", {
       method: "POST",
       body: JSON.stringify(payload),
@@ -88,6 +144,15 @@ async function handleImport(endpoint, successText) {
   importMessage.value = { text: "資料處理中...", kind: "info" };
 
   try {
+    if (isStaticSite) {
+      const staticRows = await loadStaticRows({ reset: endpoint.includes("reset-import") });
+      importMessage.value = {
+        text: `GitHub Pages 靜態版已載入 ${staticRows.length} 筆 XLS 資料`,
+        kind: "ok",
+      };
+      return;
+    }
+
     const result = await requestJson(endpoint, { method: "POST" });
     await loadRows();
     importMessage.value = {
