@@ -1,10 +1,16 @@
 <script setup>
-defineProps({
+import { computed } from "vue";
+
+const props = defineProps({
   rows: {
     type: Array,
     default: () => [],
   },
 });
+
+const sortedRows = computed(() =>
+  [...props.rows].sort((left, right) => String(right.date).localeCompare(String(left.date))),
+);
 
 function yearFromDate(dateText) {
   return typeof dateText === "string" ? dateText.slice(0, 4) : "";
@@ -39,10 +45,10 @@ function formatTime(value) {
         </tr>
       </thead>
       <tbody>
-        <tr v-if="rows.length === 0">
+        <tr v-if="sortedRows.length === 0">
           <td colspan="3" class="empty">尚無符合條件的資料</td>
         </tr>
-        <tr v-for="row in rows" :key="row.id">
+        <tr v-for="row in sortedRows" :key="row.id">
           <td>{{ yearFromDate(row.date) }}</td>
           <td class="number">{{ formatPrice(row.price) }} 元 / 度</td>
           <td>{{ formatTime(row.created_at) }}</td>
