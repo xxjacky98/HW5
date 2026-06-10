@@ -19,26 +19,35 @@ const emit = defineEmits(["create-price"]);
 const year = ref(String(new Date().getFullYear()));
 const price = ref("");
 const name = ref(props.seriesName);
+const validationMessage = ref("");
 
-const canSubmit = computed(() => {
-  const yearNumber = Number(year.value);
-  const priceNumber = Number(price.value);
-  return (
-    Number.isInteger(yearNumber) &&
-    yearNumber >= 1900 &&
-    yearNumber <= 2100 &&
-    Number.isFinite(priceNumber) &&
-    priceNumber > 0
-  );
+const visibleMessage = computed(() => {
+  if (validationMessage.value) {
+    return { text: validationMessage.value, kind: "error" };
+  }
+  return props.message;
 });
 
 function submitForm() {
-  if (!canSubmit.value) return;
+  validationMessage.value = "";
+
+  const yearNumber = Number(year.value);
+  const priceNumber = Number(price.value);
+
+  if (!Number.isInteger(yearNumber) || yearNumber < 1900 || yearNumber > 2100) {
+    validationMessage.value = "請輸入 1900 到 2100 之間的年份";
+    return;
+  }
+
+  if (!Number.isFinite(priceNumber) || priceNumber <= 0) {
+    validationMessage.value = "請輸入大於 0 的平均電價";
+    return;
+  }
 
   emit("create-price", {
     date: `${String(year.value).padStart(4, "0")}-01-01`,
     name: name.value,
-    price: Number(price.value),
+    price: priceNumber,
   });
 
   price.value = "";
@@ -65,12 +74,20 @@ function submitForm() {
 
       <label class="field">
         <span>平均電價（元 / 度）</span>
-        <input v-model="price" type="number" min="0" step="0.0001" inputmode="decimal" required />
+        <input
+          v-model="price"
+          type="number"
+          min="0"
+          step="0.0001"
+          inputmode="decimal"
+          placeholder="例如：2.9000"
+          required
+        />
       </label>
 
       <div class="form-actions">
-        <button type="submit" :disabled="!canSubmit">新增</button>
-        <StatusMessage :message="message" />
+        <button type="submit">新增</button>
+        <StatusMessage :message="visibleMessage" />
       </div>
     </form>
   </section>
@@ -136,11 +153,5 @@ input:focus {
   display: grid;
   gap: 10px;
   margin-top: 4px;
-}
-
-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-  box-shadow: none;
 }
 </style>
